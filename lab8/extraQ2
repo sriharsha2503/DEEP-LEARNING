@@ -1,0 +1,137 @@
+📦 1. Download and Load the Data
+python
+Copy
+Edit
+import os
+import glob
+import unicodedata
+import string
+import torch
+from torch import nn
+import random
+
+# All possible letters
+all_letters = string.ascii_letters + " .,;'"
+n_letters = len(all_letters)
+
+# Folder containing language txt files
+data_path = './data/names/'
+all_categories = []
+category_lines = {}
+
+# Helper: turn Unicode into plain ASCII
+def unicode_to_ascii(s):
+    return ''.join(
+        c for c in unicodedata.normalize('NFD', s)
+        if unicodedata.category(c) != 'Mn' and c in all_letters
+    )
+
+# Read a file and split into lines
+def read_lines(filename):
+    with open(filename, encoding='utf-8') as f:
+        return [unicode_to_ascii(line.strip()) for line in f]
+
+# Load all languages
+for filename in glob.glob(data_path + '*.txt'):
+    category = os.path.splitext(os.path.basename(filename))[0]
+    all_categories.append(category)
+    lines = read_lines(filename)
+    category_lines[category] = lines
+
+n_categories = len(all_categories)
+print(f"Loaded {n_categories} categories: {all_categories}")
+🧠 2. Encoding
+python
+Copy
+Edit
+# Convert letter to index
+def letter_to_index(letter):
+    return all_letters.find(letter)
+
+# Turn a line into a tensor (one-hot encoded)
+def line_to_tensor(line):
+    tensor = torch.zeros(len(line), 1, n_letters)
+    for li, letter in enumerate(line):
+        tensor[li][0][letter_to_index(letter)] = 1
+    return tensor
+🧠 3. RNN Model
+python
+Copy
+Edit
+class NameRNN(nn.Module):
+    def __init__(self, input_size, hidden_size, output_size):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.rnn = nn.RNN(input_size, hidden_size)
+        self.fc = nn.Linear(hidden_size, output_size)
+
+    def forward(self, input, hidden):
+        out, hidden = self.rnn(input, hidden)
+        out = self.fc(out[-1])  # Use final output
+        return out, hidden
+
+    def init_hidden(self):
+        return torch.zeros(1, 1, self.hidden_size)
+⚙️ 4. Training Setup
+python
+Copy
+Edit
+criterion = nn.CrossEntropyLoss()
+rnn = NameRNN(n_letters, 128, n_categories)
+optimizer = torch.optim.SGD(rnn.parameters(), lr=0.005)
+
+# Get random training example
+def random_training_example():
+    category = random.choice(all_categories)
+    line = random.choice(category_lines[category])
+    category_tensor = torch.tensor([all_categories.index(category)], dtype=torch.long)
+    line_tensor = line_to_tensor(line)
+    return category, line, category_tensor, line_tensor
+🚀 5. Training Loop
+python
+Copy
+Edit
+def train(category_tensor, line_tensor):
+    hidden = rnn.init_hidden()
+    rnn.zero_grad()
+    output, hidden = rnn(line_tensor, hidden)
+    loss = criterion(output, category_tensor)
+    loss.backward()
+    optimizer.step()
+    return output, loss.item()
+
+# Train for a few thousand examples
+n_iters = 10000
+print_every = 1000
+for iter in range(1, n_iters + 1):
+    category, line, category_tensor, line_tensor = random_training_example()
+    output, loss = train(category_tensor, line_tensor)
+
+    if iter % print_every == 0:
+        guess = all_categories[output.argmax().item()]
+        correct = '✓' if guess == category else f'✗ ({category})'
+        print(f"{iter} | Loss: {loss:.4f} | Name: {line} -> {guess} {correct}")
+🧪 6. Prediction
+python
+Copy
+Edit
+def predict(name, n_predictions=3):
+    print(f"\n> {name}")
+    with torch.no_grad():
+        line_tensor = line_to_tensor(name)
+        hidden = rnn.init_hidden()
+        output, hidden = rnn(line_tensor, hidden)
+
+        topv, topi = output.topk(n_predictions, 1, True)
+        for i in range(n_predictions):
+            value = topv[0][i].item()
+            category_index = topi[0][i].item()
+            print(f"{all_categories[category_index]} ({value:.2f})")
+Try:
+
+python
+Copy
+Edit
+predict("Srinivasan")
+predict("Smith")
+predict("Garcia")
