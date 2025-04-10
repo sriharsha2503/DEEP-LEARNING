@@ -1,7 +1,4 @@
 📦 1. Download and Load the Data
-python
-Copy
-Edit
 import os
 import glob
 import unicodedata
@@ -41,9 +38,6 @@ for filename in glob.glob(data_path + '*.txt'):
 n_categories = len(all_categories)
 print(f"Loaded {n_categories} categories: {all_categories}")
 🧠 2. Encoding
-python
-Copy
-Edit
 # Convert letter to index
 def letter_to_index(letter):
     return all_letters.find(letter)
@@ -55,9 +49,6 @@ def line_to_tensor(line):
         tensor[li][0][letter_to_index(letter)] = 1
     return tensor
 🧠 3. RNN Model
-python
-Copy
-Edit
 class NameRNN(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
         super().__init__()
@@ -73,9 +64,6 @@ class NameRNN(nn.Module):
     def init_hidden(self):
         return torch.zeros(1, 1, self.hidden_size)
 ⚙️ 4. Training Setup
-python
-Copy
-Edit
 criterion = nn.CrossEntropyLoss()
 rnn = NameRNN(n_letters, 128, n_categories)
 optimizer = torch.optim.SGD(rnn.parameters(), lr=0.005)
@@ -88,9 +76,6 @@ def random_training_example():
     line_tensor = line_to_tensor(line)
     return category, line, category_tensor, line_tensor
 🚀 5. Training Loop
-python
-Copy
-Edit
 def train(category_tensor, line_tensor):
     hidden = rnn.init_hidden()
     rnn.zero_grad()
@@ -112,9 +97,6 @@ for iter in range(1, n_iters + 1):
         correct = '✓' if guess == category else f'✗ ({category})'
         print(f"{iter} | Loss: {loss:.4f} | Name: {line} -> {guess} {correct}")
 🧪 6. Prediction
-python
-Copy
-Edit
 def predict(name, n_predictions=3):
     print(f"\n> {name}")
     with torch.no_grad():
@@ -128,10 +110,6 @@ def predict(name, n_predictions=3):
             category_index = topi[0][i].item()
             print(f"{all_categories[category_index]} ({value:.2f})")
 Try:
-
-python
-Copy
-Edit
 predict("Srinivasan")
 predict("Smith")
 predict("Garcia")
