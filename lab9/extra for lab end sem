@@ -1,0 +1,138 @@
+import numpy as np
+import torch
+import torch.nn as nn
+from torch.utils.data import Dataset, DataLoader, random_split
+import matplotlib.pyplot as plt
+
+# --- Custom Synthetic Dataset ---
+class SyntheticTimeSeriesDataset(Dataset):
+    def __init__(self, num_samples=100, seq_length=20, num_features=1, random_seed=42):
+        self.features, self.targets = self._generate_data(num_samples, seq_length, num_features, random_seed)
+        self.features = torch.tensor(self.features, dtype=torch.float32)
+        self.targets = torch.tensor(self.targets, dtype=torch.float32)
+
+    def _generate_data(self, num_samples, seq_length, num_features, random_seed):
+        np.random.seed(random_seed)
+        t = np.linspace(0, 1, seq_length)
+        base_signals = []
+        for i in range(num_features):
+            freq = np.random.uniform(1, 5)
+            phase = np.random.uniform(0, 2 * np.pi)
+            amplitude = np.random.uniform(0.5, 2)
+            signal = amplitude * np.sin(2 * np.pi * freq * t + phase)
+            base_signals.append(signal)
+
+        features = np.zeros((num_samples, seq_length, num_features))
+        targets = np.zeros((num_samples, 1))
+        for i in range(num_samples):
+            for j in range(num_features):
+                noise = np.random.normal(0, 0.1, seq_length)
+                features[i, :, j] = base_signals[j] + noise
+            targets[i, 0] = np.mean(features[i, -1, :]) + np.random.normal(0, 0.05)
+
+        return features, targets
+
+    def __len__(self):
+        return len(self.features)
+
+    def __getitem__(self, idx):
+        return self.features[idx], self.targets[idx]
+
+# --- Load Dataset and Plot Raw Data ---
+dataset = SyntheticTimeSeriesDataset(num_samples=1000, seq_length=20, num_features=1)
+raw_data = dataset.features[:, :, 0].numpy().flatten()
+
+plt.figure(figsize=(10, 3))
+plt.plot(raw_data, label="Synthetic Time Series Data")
+plt.title("Raw Synthetic Time Series Data")
+plt.xlabel("Time Step")
+plt.ylabel("Signal Value")
+plt.legend()
+plt.show()
+
+# --- Train/Test Split ---
+train_size = int(0.8 * len(dataset))
+test_size = len(dataset) - train_size
+train_set, test_set = random_split(dataset, [train_size, test_size])
+train_loader = DataLoader(train_set, batch_size=64, shuffle=True)
+test_loader = DataLoader(test_set, batch_size=1, shuffle=False)
+
+# --- Define LSTM Model ---
+class LSTMModel(nn.Module):
+    def __init__(self, input_size=1, hidden_size=64, num_layers=1):
+        super().__init__()
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+        self.fc = nn.Linear(hidden_size, 1)
+
+    def forward(self, x):
+        out, _ = self.lstm(x)
+        out = out[:, -1, :]
+        return self.fc(out).view(-1)
+
+# --- Training Setup ---
+model = LSTMModel(input_size=1, hidden_size=64)
+criterion = nn.MSELoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+epochs = 100
+loss_history = []
+
+# --- Training Loop ---
+for epoch in range(epochs):
+    model.train()
+    total_loss = 0
+    for batch_x, batch_y in train_loader:
+        optimizer.zero_grad()
+        preds = model(batch_x)
+        loss = criterion(preds, batch_y.view(-1))
+        loss.backward()
+        optimizer.step()
+        total_loss += loss.item()
+    avg_loss = total_loss / len(train_loader)
+    loss_history.append(avg_loss)
+    if (epoch + 1) % 10 == 0:
+        print(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.4f}")
+
+# --- Plot Epoch vs Loss ---
+plt.figure(figsize=(8, 4))
+plt.plot(loss_history, label="Training Loss")
+plt.title("Epoch vs Loss")
+plt.xlabel("Epoch")
+plt.ylabel("MSE Loss")
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# --- Evaluation ---
+model.eval()
+preds, targets = [], []
+with torch.no_grad():
+    for x, y in test_loader:
+        pred = model(x).item()
+        preds.append(pred)
+        targets.append(y.item())
+
+# --- Plot Predictions vs Actuals ---
+plt.figure(figsize=(10, 4))
+plt.plot(targets, label='Actual')
+plt.plot(preds, label='Predicted')
+plt.legend()
+plt.title("Test Set Predictions vs Actuals")
+plt.xlabel("Sample Index")
+plt.ylabel("Target Value")
+plt.grid(True)
+plt.show()
+
+# --- Predict Future 5 Values (Auto-regressive) ---
+last_input, _ = test_set[-1]
+future_preds = []
+current_input = last_input.unsqueeze(0)
+
+model.eval()
+with torch.no_grad():
+    for _ in range(5):
+        next_pred = model(current_input).view(1, 1, 1)  # reshape for next step
+        future_preds.append(next_pred.item())
+        current_input = torch.cat([current_input[:, 1:, :], next_pred], dim=1)
+
+print("Next 5 predicted values after last input:")
+print(future_preds)
