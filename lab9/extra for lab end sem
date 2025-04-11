@@ -136,3 +136,102 @@ with torch.no_grad():
 
 print("Next 5 predicted values after last input:")
 print(future_preds)
+======================================================================================================
+for lstm basic version
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader
+import matplotlib.pyplot as plt
+
+# --- Load Dataset ---
+dataset = SyntheticTimeSeriesDataset(num_samples=1000, seq_length=20, num_features=1)
+train_size = int(0.8 * len(dataset))
+test_size = len(dataset) - train_size
+train_set, test_set = torch.utils.data.random_split(dataset, [train_size, test_size])
+
+train_loader = DataLoader(train_set, batch_size=64, shuffle=True)
+test_loader = DataLoader(test_set, batch_size=1, shuffle=False)
+
+# --- Define LSTM Model ---
+class LSTMModel(nn.Module):
+    def __init__(self, input_size=1, hidden_size=64, num_layers=1):
+        super().__init__()
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+        self.fc = nn.Linear(hidden_size, 1)
+
+    def forward(self, x):
+        out, _ = self.lstm(x)  # out: [batch, seq_len, hidden]
+        out = out[:, -1, :]    # last time step
+        return self.fc(out).view(-1)
+
+# --- Training Setup ---
+model = LSTMModel(input_size=1, hidden_size=64)
+criterion = nn.MSELoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+epochs = 100
+
+# --- Training Loop ---
+for epoch in range(epochs):
+    model.train()
+    total_loss = 0
+    for batch_x, batch_y in train_loader:
+        optimizer.zero_grad()
+        preds = model(batch_x)
+        loss = criterion(preds, batch_y.view(-1))
+        loss.backward()
+        optimizer.step()
+        total_loss += loss.item()
+    if (epoch + 1) % 10 == 0:
+        print(f"Epoch {epoch+1}/{epochs}, Loss: {total_loss / len(train_loader):.4f}")
+
+# --- Evaluation ---
+model.eval()
+preds, targets = [], []
+with torch.no_grad():
+    for x, y in test_loader:
+        pred = model(x).item()
+        preds.append(pred)
+        targets.append(y.item())
+
+# --- Plot Results ---
+plt.figure(figsize=(10, 5))
+plt.plot(targets, label='Actual')
+plt.plot(preds, label='Predicted')
+plt.legend()
+plt.title("LSTM Prediction on Synthetic Time Series")
+plt.xlabel("Sample Index")
+plt.ylabel("Target Value")
+plt.show()
+
+=============================================================================================
+for rnn
+✅ Updated Model: RNNModel
+python
+Copy code
+class RNNModel(nn.Module):
+    def __init__(self, input_size=1, hidden_size=64, num_layers=1):
+        super().__init__()
+        self.rnn = nn.RNN(input_size, hidden_size, num_layers, batch_first=True)
+        self.fc = nn.Linear(hidden_size, 1)
+
+    def forward(self, x):
+        out, _ = self.rnn(x)             # out: [batch, seq_len, hidden_size]
+        out = out[:, -1, :]              # take last time step
+        return self.fc(out).view(-1)     # map to scalar output
+🔁 Everything else stays the same:
+Training loop
+
+Loss function
+
+Evaluation
+
+Plotting
+
+🧪 Plug this model into your training pipeline like:
+python
+Copy code
+model = RNNModel(input_size=1, hidden_size=64)
+
+================================================================================================
+
+
