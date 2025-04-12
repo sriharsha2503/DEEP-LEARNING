@@ -234,4 +234,75 @@ model = RNNModel(input_size=1, hidden_size=64)
 
 ================================================================================================
 
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import string
+
+# --- 1. Character Vocabulary ---
+letters = string.ascii_lowercase + " #"  # 26 lowercase + space + EOF
+n_letters = len(letters)
+
+# --- 2. One-hot Encoding ---
+def ltt(ch):
+    ans = torch.zeros(n_letters)
+    ans[letters.find(ch)] = 1
+    return ans
+
+def getLine(s):
+    return torch.cat([ltt(c).unsqueeze(0) for c in s], dim=0).view(len(s), 1, n_letters)
+
+# --- 3. Data Preparation ---
+data = "i love neural networks"
+data = data.lower()
+EOF = "#"
+seq_len = len(data)
+targets = torch.tensor([letters.find(c) for c in data[1:] + EOF])
+
+# --- 4. LSTM Model ---
+class MyLSTM(nn.Module):
+    def __init__(self, input_dim, hidden_dim):
+        super(MyLSTM, self).__init__()
+        self.LSTM = nn.LSTM(input_dim, hidden_dim)
+
+    def forward(self, inp, hc):
+        output, _ = self.LSTM(inp, hc)
+        return output
+
+hidden_dim = n_letters
+model = MyLSTM(n_letters, hidden_dim)
+optimizer = optim.Adam(model.parameters(), lr=0.01)
+loss_fn = nn.CrossEntropyLoss()
+
+# --- 5. Input Tensor ---
+inp = torch.cat([ltt(c).unsqueeze(0) for c in data], dim=0).view(seq_len, 1, n_letters)
+
+# --- 6. Training Loop ---
+n_iters = 150
+for itr in range(n_iters):
+    model.zero_grad()
+    h = torch.rand(1, 1, hidden_dim)
+    c = torch.rand(1, 1, hidden_dim)
+    output = model(inp, (h, c)).view(seq_len, n_letters)
+    loss = loss_fn(output, targets)
+    loss.backward()
+    optimizer.step()
+    if itr % 10 == 0:
+        print(f"Iter {itr}: Loss = {loss.item():.4f}")
+
+# --- 7. Prediction ---
+def predict(s):
+    print(f"\nInput: {s}")
+    inp = getLine(s)
+    h = torch.rand(1, 1, hidden_dim)
+    c = torch.rand(1, 1, hidden_dim)
+    out = model(inp, (h, c))
+    top_idx = out[-1][0].topk(1)[1].item()
+    print(f"Predicted next char: {letters[top_idx]}")
+    return letters[top_idx]
+
+# --- 8. Predict next character ---
+predict("i love neu")
+============================================================================================================
+
 
